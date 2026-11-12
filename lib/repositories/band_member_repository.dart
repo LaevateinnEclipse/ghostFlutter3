@@ -1,9 +1,14 @@
+import 'package:dio/dio.dart';
+
 import '../models/band_member.dart';
 import '../models/band_member_query.dart';
 import '../models/page_result.dart';
 
 abstract interface class BandMemberRepository {
-  Future<PageResult<BandMember>> find(BandMemberQuery query);
+  Future<PageResult<BandMember>> find(
+    BandMemberQuery query, {
+    CancelToken? cancelToken,
+  });
   Future<BandMember?> findById(int id);
   Future<List<BandMember>> all({bool includeDeleted = false});
   Future<BandMember> save(BandMember member);

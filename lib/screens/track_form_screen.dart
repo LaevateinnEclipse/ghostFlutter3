@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../core/errors.dart';
+import '../core/form_outcome.dart';
 import '../core/validators.dart';
 import '../models/track.dart';
 import '../repositories/track_repository.dart';
 import '../state/catalog_notifier.dart';
-import '../widgets/common.dart';
 import '../widgets/dirty_guard.dart';
 import '../widgets/entity_form.dart';
 
@@ -25,6 +24,7 @@ class _TrackFormScreenState extends State<TrackFormScreen> {
   final Map<String, String?> _serverErrors = {};
   bool _loading = true;
   bool _dirty = false;
+  bool _saving = false;
   int _revision = 0;
 
   @override
@@ -104,11 +104,13 @@ class _TrackFormScreenState extends State<TrackFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final form = _entityFormKey.currentState;
     if (form == null) return;
     final tracks = context.read<TrackRepository>();
     final catalog = context.read<CatalogNotifier>();
+    setState(() => _saving = true);
     try {
       await tracks.save(Track(
             id: _track?.id ?? 0,
@@ -120,21 +122,27 @@ class _TrackFormScreenState extends State<TrackFormScreen> {
             deletedAt: _track?.deletedAt,
           ));
       _dirty = false;
-      await catalog.load();
+      await catalog.load(force: true);
       if (!mounted) return;
       context.go('/tracks');
-    } on FieldValidationException catch (error) {
-      if (!mounted) return;
-      _entityFormKey.currentState?.rejectValue(error.field);
-      setState(() {
-        _serverErrors
-          ..clear()
-          ..[error.field] = error.message;
-        _revision++;
-      });
-      _formKey.currentState?.validate();
     } catch (error) {
-      if (mounted) toast(context, 'Не удалось сохранить трек: $error');
+      if (!mounted) return;
+      consumeFormError(
+        context,
+        error,
+        reject: (field) => _entityFormKey.currentState?.rejectValue(field),
+        showOnFields: (errors) {
+          setState(() {
+            _serverErrors
+              ..clear()
+              ..addAll(errors);
+            _revision++;
+          });
+          _formKey.currentState?.validate();
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -160,6 +168,7 @@ class _TrackFormScreenState extends State<TrackFormScreen> {
                     saveLabel: widget.isEditing ? 'Сохранить изменения' : 'Создать трек',
                     onSubmit: _save,
                     onCancel: () => context.go('/tracks'),
+                    saving: _saving,
                     onChanged: () => setState(() => _dirty = true),
                     rebuildToken: _revision,
                   ),

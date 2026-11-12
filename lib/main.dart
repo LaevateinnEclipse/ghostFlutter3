@@ -1,13 +1,19 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/api_client.dart';
 import 'core/router.dart';
 import 'core/storage.dart';
 import 'repositories/album_repository.dart';
+import 'repositories/api_album_repository.dart';
+import 'repositories/api_band_member_repository.dart';
+import 'repositories/api_concert_repository.dart';
+import 'repositories/api_merch_repository.dart';
+import 'repositories/api_track_repository.dart';
 import 'repositories/band_member_repository.dart';
 import 'repositories/concert_repository.dart';
-import 'repositories/ghost_repositories.dart';
 import 'repositories/merch_repository.dart';
 import 'repositories/track_repository.dart';
 import 'state/catalog_notifier.dart';
@@ -17,15 +23,15 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
   final preferences = await SharedPreferences.getInstance();
-  final repositories = GhostRepositories(preferences);
-  await repositories.synchronizeLinks();
   final migrationNotice = VersionedStore.takeNotice(preferences);
+  final dio = buildDio();
   runApp(MultiProvider(providers: [
-    Provider<MerchRepository>.value(value: repositories.merch),
-    Provider<BandMemberRepository>.value(value: repositories.members),
-    Provider<AlbumRepository>.value(value: repositories.albums),
-    Provider<TrackRepository>.value(value: repositories.tracks),
-    Provider<ConcertRepository>.value(value: repositories.concerts),
+    Provider<Dio>.value(value: dio),
+    Provider<MerchRepository>(create: (_) => ApiMerchRepository(dio)),
+    Provider<BandMemberRepository>(create: (_) => ApiBandMemberRepository(dio)),
+    Provider<AlbumRepository>(create: (_) => ApiAlbumRepository(dio)),
+    Provider<TrackRepository>(create: (_) => ApiTrackRepository(dio)),
+    Provider<ConcertRepository>(create: (_) => ApiConcertRepository(dio)),
     ChangeNotifierProvider(
         create: (c) => MerchListNotifier(c.read<MerchRepository>())),
     ChangeNotifierProvider(

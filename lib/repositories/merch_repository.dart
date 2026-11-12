@@ -1,9 +1,14 @@
+import 'package:dio/dio.dart';
+
 import '../models/merch_item.dart';
 import '../models/merch_query.dart';
 import '../models/page_result.dart';
 
 abstract interface class MerchRepository {
-  Future<PageResult<MerchItem>> find(MerchQuery query);
+  Future<PageResult<MerchItem>> find(
+    MerchQuery query, {
+    CancelToken? cancelToken,
+  });
   Future<MerchItem?> findById(int id);
   Future<List<MerchItem>> all({bool includeDeleted = false});
   Future<MerchItem> save(MerchItem item);

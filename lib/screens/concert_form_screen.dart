@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../core/errors.dart';
+import '../core/form_outcome.dart';
 import '../core/validators.dart';
 import '../data/seed_data.dart';
 import '../models/band_member.dart';
 import '../models/concert.dart';
 import '../repositories/concert_repository.dart';
 import '../state/catalog_notifier.dart';
-import '../widgets/common.dart';
 import '../widgets/dirty_guard.dart';
 import '../widgets/entity_form.dart';
 
@@ -27,6 +26,7 @@ class _ConcertFormScreenState extends State<ConcertFormScreen> {
   final Map<String, String?> _serverErrors = {};
   bool _loading = true;
   bool _dirty = false;
+  bool _saving = false;
   int? _albumId;
   int _revision = 0;
 
@@ -199,11 +199,13 @@ class _ConcertFormScreenState extends State<ConcertFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final form = _entityFormKey.currentState;
     if (form == null) return;
     final concerts = context.read<ConcertRepository>();
     final catalog = context.read<CatalogNotifier>();
+    setState(() => _saving = true);
     try {
       await concerts.save(Concert(
             id: _concert?.id ?? 0,
@@ -219,21 +221,27 @@ class _ConcertFormScreenState extends State<ConcertFormScreen> {
             deletedAt: _concert?.deletedAt,
           ));
       _dirty = false;
-      await catalog.load();
+      await catalog.load(force: true);
       if (!mounted) return;
       context.go('/concerts');
-    } on FieldValidationException catch (error) {
-      if (!mounted) return;
-      _entityFormKey.currentState?.rejectValue(error.field);
-      setState(() {
-        _serverErrors
-          ..clear()
-          ..[error.field] = error.message;
-        _revision++;
-      });
-      _formKey.currentState?.validate();
     } catch (error) {
-      if (mounted) toast(context, 'Не удалось сохранить концерт: $error');
+      if (!mounted) return;
+      consumeFormError(
+        context,
+        error,
+        reject: (field) => _entityFormKey.currentState?.rejectValue(field),
+        showOnFields: (errors) {
+          setState(() {
+            _serverErrors
+              ..clear()
+              ..addAll(errors);
+            _revision++;
+          });
+          _formKey.currentState?.validate();
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -266,6 +274,7 @@ class _ConcertFormScreenState extends State<ConcertFormScreen> {
                         : 'Создать концерт',
                     onSubmit: _save,
                     onCancel: () => context.go('/concerts'),
+                    saving: _saving,
                     onChanged: () => setState(() => _dirty = true),
                     rebuildToken: _revision,
                   ),

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/errors.dart';
 import '../core/storage.dart';
@@ -55,7 +56,7 @@ class InMemoryBandMemberRepository implements BandMemberRepository {
       _items.fold<int>(0, (maxId, item) => item.id > maxId ? item.id : maxId) +
       1;
   @override
-  Future<PageResult<BandMember>> find(BandMemberQuery q) async {
+  Future<PageResult<BandMember>> find(BandMemberQuery q, {CancelToken? cancelToken}) async {
     await Future<void>.delayed(const Duration(milliseconds: 250));
     if (q.yearsFrom != null && q.yearsTo != null && q.yearsFrom! > q.yearsTo!) {
       throw ArgumentError('Стаж «от» больше стажа «до»');

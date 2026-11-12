@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/errors.dart';
 import '../data/seed_data.dart';
@@ -32,7 +33,7 @@ class InMemoryAlbumRepository extends InMemoryRepository<Album>
       : item.copyWith(deletedAt: deletedAt);
 
   @override
-  Future<PageResult<Album>> find(AlbumQuery query) async {
+  Future<PageResult<Album>> find(AlbumQuery query, {CancelToken? cancelToken}) async {
     if (query.yearFrom != null &&
         query.yearTo != null &&
         query.yearFrom! > query.yearTo!) {

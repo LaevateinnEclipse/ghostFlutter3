@@ -1,9 +1,14 @@
+import 'package:dio/dio.dart';
+
 import '../models/concert.dart';
 import '../models/concert_query.dart';
 import '../models/page_result.dart';
 
 abstract interface class ConcertRepository {
-  Future<PageResult<Concert>> find(ConcertQuery query);
+  Future<PageResult<Concert>> find(
+    ConcertQuery query, {
+    CancelToken? cancelToken,
+  });
   Future<Concert?> findById(int id);
   Future<List<Concert>> all({bool includeDeleted = false});
   Future<Concert> save(Concert concert);

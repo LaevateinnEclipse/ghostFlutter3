@@ -1,0 +1,192 @@
+import 'package:dio/dio.dart';
+
+import '../core/api_client.dart';
+import '../core/api_exceptions.dart';
+import '../core/config.dart';
+import '../models/page_result.dart';
+
+/// Общая часть репозитория поверх REST API.
+///
+/// Наследники задают путь коллекции, разбор записи, тело запроса
+/// и параметры поиска. Экраны по-прежнему зависят только от интерфейса.
+abstract class ApiRepository<T, Q> {
+  ApiRepository(this.dio);
+
+  final Dio dio;
+
+  String get collectionPath;
+
+  T fromJson(Map<String, dynamic> json);
+
+  Map<String, dynamic> toRequestBody(T item);
+
+  Map<String, dynamic> toParameters(Q query);
+
+  int get defaultSize;
+
+  Q allQuery({bool includeDeleted = false});
+
+  PageResult<T> parsePage(
+    Map<String, dynamic> data, {
+    required int fallbackSize,
+  }) {
+    final rawItems = data['items'];
+    final items = rawItems is List
+        ? rawItems.whereType<Map<String, dynamic>>().map(fromJson).toList()
+        : <T>[];
+    return PageResult(
+      items: items,
+      page: _asInt(data['page']) ?? 1,
+      size: _asInt(data['size']) ?? fallbackSize,
+      total: _asInt(data['total']) ?? items.length,
+    );
+  }
+
+  Future<PageResult<T>> find(
+    Q query, {
+    CancelToken? cancelToken,
+  }) async {
+    final parameters = toParameters(query);
+    final size = _asInt(parameters['size']) ?? defaultSize;
+    final response = await withRetry(
+      () => guard(
+        () => dio.get<Map<String, dynamic>>(
+          collectionPath,
+          queryParameters: {
+            ..._clean(parameters),
+            if (apiDemoDelayMs > 0) '__delay': apiDemoDelayMs,
+            if (apiDemoFail > 0) '__fail': apiDemoFail,
+          },
+          cancelToken: cancelToken,
+        ),
+      ),
+    );
+    return parsePage(
+      response.data ?? const <String, dynamic>{},
+      fallbackSize: size,
+    );
+  }
+
+  Future<T?> findById(int id) async {
+    try {
+      final response = await withRetry(
+        () => guard(
+          () => dio.get<Map<String, dynamic>>('$collectionPath/$id'),
+        ),
+      );
+      return fromJson(response.data ?? const <String, dynamic>{});
+    } on NotFoundException {
+      return null;
+    }
+  }
+
+  Future<T> create(T item) async {
+    final response = await guard(
+      () => dio.post<Map<String, dynamic>>(
+        collectionPath,
+        data: toRequestBody(item),
+      ),
+    );
+    return fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<T> update(int id, T item) async {
+    final response = await guard(
+      () => dio.put<Map<String, dynamic>>(
+        '$collectionPath/$id',
+        data: toRequestBody(item),
+      ),
+    );
+    return fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<void> softDelete(int id) async {
+    await guard(() => dio.delete<void>('$collectionPath/$id'));
+  }
+
+  Future<void> hardDelete(int id) async {
+    await guard(
+      () => dio.delete<void>(
+        '$collectionPath/$id',
+        queryParameters: {'hard': 'true'},
+      ),
+    );
+  }
+
+  Future<T> restoreRecord(int id) async {
+    final response = await guard(
+      () => dio.post<Map<String, dynamic>>('$collectionPath/$id/restore'),
+    );
+    return fromJson(response.data ?? const <String, dynamic>{});
+  }
+
+  Future<int> softDeleteMany(List<int> ids) async {
+    final response = await guard(
+      () => dio.post<Map<String, dynamic>>(
+        '$collectionPath/bulk-delete',
+        data: {'ids': ids},
+      ),
+    );
+    return _asInt(response.data?['deleted']) ?? 0;
+  }
+
+  Future<int> hardDeleteMany(List<int> ids) async {
+    final response = await guard(
+      () => dio.post<Map<String, dynamic>>(
+        '$collectionPath/bulk-delete',
+        queryParameters: {'hard': 'true'},
+        data: {'ids': ids},
+      ),
+    );
+    return _asInt(response.data?['deleted']) ?? 0;
+  }
+
+  Future<List<T>> all({bool includeDeleted = false}) async {
+    final parameters = toParameters(allQuery(includeDeleted: includeDeleted));
+    final items = <T>[];
+    var page = 1;
+    while (true) {
+      final response = await withRetry(
+        () => guard(
+          () => dio.get<Map<String, dynamic>>(
+            collectionPath,
+            queryParameters: {..._clean(parameters), 'page': page},
+          ),
+        ),
+      );
+      final result = parsePage(response.data ?? {}, fallbackSize: 100);
+      items.addAll(result.items);
+      if (items.length >= result.total || result.items.isEmpty) return items;
+      page++;
+    }
+  }
+
+  Future<int> count(Map<String, dynamic> parameters) async {
+    final response = await withRetry(
+      () => guard(
+        () => dio.get<Map<String, dynamic>>(
+          collectionPath,
+          queryParameters: {..._clean(parameters), 'page': 1, 'size': 1},
+        ),
+      ),
+    );
+    return _asInt(response.data?['total']) ?? 0;
+  }
+
+  static Map<String, dynamic> _clean(Map<String, dynamic> source) {
+    final result = <String, dynamic>{};
+    source.forEach((key, value) {
+      if (value == null) return;
+      if (value is String && value.trim().isEmpty) return;
+      result[key] = value;
+    });
+    return result;
+  }
+
+  static int? _asInt(Object? value) => switch (value) {
+        int number => number,
+        num number => number.toInt(),
+        String text => int.tryParse(text),
+        _ => null,
+      };
+}

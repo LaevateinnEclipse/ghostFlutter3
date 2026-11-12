@@ -87,6 +87,7 @@ class EntityForm extends StatefulWidget {
   final VoidCallback? onRequestRebuild;
   final Map<String, String?> serverErrors;
   final int rebuildToken;
+  final bool saving;
   const EntityForm({
     super.key,
     required this.formKey,
@@ -99,6 +100,7 @@ class EntityForm extends StatefulWidget {
     this.onRequestRebuild,
     this.serverErrors = const {},
     this.rebuildToken = 0,
+    this.saving = false,
   });
   @override
   State<EntityForm> createState() => EntityFormState();
@@ -255,6 +257,7 @@ class EntityFormState extends State<EntityForm> {
                     onSave: widget.onSubmit,
                     saveLabel: widget.saveLabel,
                     cancelLabel: widget.cancelLabel,
+                    saving: widget.saving,
                   ),
                 ],
               ),
@@ -656,20 +659,25 @@ class EntityFormActions extends StatelessWidget {
   final VoidCallback onSave;
   final String saveLabel;
   final String cancelLabel;
+  final bool saving;
   const EntityFormActions({
     super.key,
     required this.onCancel,
     required this.onSave,
     this.saveLabel = 'Сохранить',
     this.cancelLabel = 'Отмена',
+    this.saving = false,
   });
   @override
   Widget build(BuildContext context) => Wrap(
         alignment: WrapAlignment.end,
         spacing: 12,
         children: [
-          TextButton(onPressed: onCancel, child: Text(cancelLabel)),
-          FilledButton(onPressed: onSave, child: Text(saveLabel)),
+          TextButton(
+              onPressed: saving ? null : onCancel, child: Text(cancelLabel)),
+          FilledButton(
+              onPressed: saving ? null : onSave,
+              child: Text(saving ? 'Сохранение…' : saveLabel)),
         ],
       );
 }

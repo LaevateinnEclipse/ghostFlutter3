@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/api_exceptions.dart';
+import '../core/errors.dart';
+
 const compactWidth = 600.0;
 
 class AppScaffold extends StatelessWidget {
@@ -140,4 +143,26 @@ void toast(BuildContext context, String message) {
       content: Text(message),
       behavior: SnackBarBehavior.floating,
     ));
+}
+
+/// Отказ операции не подменяет уже загруженный список экраном ошибки.
+Future<void> showOperationError(BuildContext context, Object error) async {
+  if (!context.mounted) return;
+  if (error is ConflictException || error is LinkedRecordsException) {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Операция не выполнена'),
+        content: Text('$error\n\nДанные не изменены.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
+    return;
+  }
+  toast(context, error.toString());
 }

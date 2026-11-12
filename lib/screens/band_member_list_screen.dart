@@ -250,9 +250,9 @@ class _BandMemberListScreenState extends State<BandMemberListScreen> {
   Future<void> _run(Future<void> Function() action) async {
     try {
       await action();
-      if (mounted) await context.read<CatalogNotifier>().load();
+      if (mounted) await context.read<CatalogNotifier>().load(force: true);
     } catch (error) {
-      if (mounted) toast(context, '$error');
+      if (mounted) await showOperationError(context, error);
     }
   }
 }

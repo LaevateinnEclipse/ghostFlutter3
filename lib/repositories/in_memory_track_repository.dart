@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/errors.dart';
 import '../data/seed_data.dart';
@@ -32,7 +33,7 @@ class InMemoryTrackRepository extends InMemoryRepository<Track>
       : item.copyWith(deletedAt: deletedAt);
 
   @override
-  Future<PageResult<Track>> find(TrackQuery query) async => page(
+  Future<PageResult<Track>> find(TrackQuery query, {CancelToken? cancelToken}) async => page(
         pageNumber: query.page,
         pageSize: query.size,
         filter: (rows) {

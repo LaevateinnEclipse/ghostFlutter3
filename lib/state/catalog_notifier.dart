@@ -35,6 +35,11 @@ class CatalogNotifier extends ChangeNotifier {
   List<MerchItem> _merchOptions = [];
   List<Concert> _concertOptions = [];
   bool _loaded = false;
+  bool _loading = false;
+  String? _error;
+  DateTime? _loadedAt;
+  Future<void>? _pending;
+  bool _disposed = false;
 
   List<Album> get albums => List.unmodifiable(_albumOptions);
   List<BandMember> get members => List.unmodifiable(_memberOptions);
@@ -42,15 +47,65 @@ class CatalogNotifier extends ChangeNotifier {
   List<MerchItem> get merch => List.unmodifiable(_merchOptions);
   List<Concert> get concerts => List.unmodifiable(_concertOptions);
   bool get loaded => _loaded;
+  bool get loading => _loading;
+  String? get error => _error;
 
-  Future<void> load() async {
-    _albumOptions = await _albums.all();
-    _memberOptions = await _members.all();
-    _trackOptions = await _tracks.all();
-    _merchOptions = await _merch.all();
-    _concertOptions = await _concerts.all();
-    _loaded = true;
-    notifyListeners();
+  /// Справочники запрашиваются один раз и держатся пять минут.
+  /// Повторное открытие формы не ходит на сервер, пока кэш свежий.
+  Future<void> load({
+    bool force = false,
+    Duration refetchAfter = const Duration(minutes: 5),
+  }) {
+    return _pending ??= _load(force: force, refetchAfter: refetchAfter)
+        .whenComplete(() => _pending = null);
+  }
+
+  Future<void> _load({
+    required bool force,
+    required Duration refetchAfter,
+  }) async {
+    final loadedAt = _loadedAt;
+    if (!force &&
+        loadedAt != null &&
+        DateTime.now().difference(loadedAt) < refetchAfter) {
+      return;
+    }
+    if (_loading) return;
+    _loading = true;
+    _error = null;
+    _safeNotify();
+    try {
+      final results = await Future.wait([
+        _albums.all(),
+        _members.all(),
+        _tracks.all(),
+        _merch.all(),
+        _concerts.all(),
+      ]);
+      _albumOptions = results[0] as List<Album>;
+      _memberOptions = results[1] as List<BandMember>;
+      _trackOptions = results[2] as List<Track>;
+      _merchOptions = results[3] as List<MerchItem>;
+      _concertOptions = results[4] as List<Concert>;
+      _loaded = true;
+      _loadedAt = DateTime.now();
+      _error = null;
+    } on Object catch (error) {
+      _error = '$error';
+    } finally {
+      _loading = false;
+      _safeNotify();
+    }
+  }
+
+  void _safeNotify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 
   String albumTitle(int id) {

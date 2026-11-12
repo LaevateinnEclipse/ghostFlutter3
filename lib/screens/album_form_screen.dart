@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../core/errors.dart';
+import '../core/form_outcome.dart';
 import '../core/validators.dart';
 import '../data/seed_data.dart';
 import '../models/album.dart';
 import '../repositories/album_repository.dart';
 import '../state/catalog_notifier.dart';
-import '../widgets/common.dart';
 import '../widgets/dirty_guard.dart';
 import '../widgets/entity_form.dart';
 
@@ -26,6 +25,7 @@ class _AlbumFormScreenState extends State<AlbumFormScreen> {
   final Map<String, String?> _serverErrors = {};
   bool _loading = true;
   bool _dirty = false;
+  bool _saving = false;
   int _revision = 0;
 
   @override
@@ -112,11 +112,13 @@ class _AlbumFormScreenState extends State<AlbumFormScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final form = _entityFormKey.currentState;
     if (form == null) return;
     final albums = context.read<AlbumRepository>();
     final catalog = context.read<CatalogNotifier>();
+    setState(() => _saving = true);
     try {
       await albums.save(Album(
             id: _album?.id ?? 0,
@@ -132,21 +134,27 @@ class _AlbumFormScreenState extends State<AlbumFormScreen> {
             deletedAt: _album?.deletedAt,
           ));
       _dirty = false;
-      await catalog.load();
+      await catalog.load(force: true);
       if (!mounted) return;
       context.go('/albums');
-    } on FieldValidationException catch (error) {
-      if (!mounted) return;
-      _entityFormKey.currentState?.rejectValue(error.field);
-      setState(() {
-        _serverErrors
-          ..clear()
-          ..[error.field] = error.message;
-        _revision++;
-      });
-      _formKey.currentState?.validate();
     } catch (error) {
-      if (mounted) toast(context, 'Не удалось сохранить альбом: $error');
+      if (!mounted) return;
+      consumeFormError(
+        context,
+        error,
+        reject: (field) => _entityFormKey.currentState?.rejectValue(field),
+        showOnFields: (errors) {
+          setState(() {
+            _serverErrors
+              ..clear()
+              ..addAll(errors);
+            _revision++;
+          });
+          _formKey.currentState?.validate();
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -171,6 +179,7 @@ class _AlbumFormScreenState extends State<AlbumFormScreen> {
                     saveLabel: widget.isEditing ? 'Сохранить изменения' : 'Создать альбом',
                     onSubmit: _save,
                     onCancel: () => context.go('/albums'),
+                    saving: _saving,
                     onChanged: () => setState(() => _dirty = true),
                     rebuildToken: _revision,
                   ),
